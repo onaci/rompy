@@ -1,0 +1,21 @@
+sources:
+
+  gebco_2020:
+    description: Gebco bathymetry
+    driver: rompy.intake.XarraySource
+    args:
+      urlpath: /static/glob/gebco20/GEBCO_2020.nc
+      transform:
+        rompy.filters.derived_filter:
+          derived_variables:
+            depth: ds.elevation * -1
+      xarray_kwargs:
+        engine: netcdf4
+        chunks: {lat: 512, lon: 512}
+    metadata:
+      name: Gebco bathy
+      tags:
+        - Gebco
+        - 2020
+        - Bathymetry
+        - Global
