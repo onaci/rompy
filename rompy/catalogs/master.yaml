@@ -1,13 +1,20 @@
 description: 'rompy Master Data Catalog'
 sources:
 
+  bathy:
+    args:
+      path: "{{CATALOG_DIR}}bathy.yaml"
+    description: 'Bathymetry Catalog'
+    driver: intake.catalog.local.YAMLFileCatalog
+    metadata: {}
+
   bom:
     args:
       path: "{{CATALOG_DIR}}bom.yaml"
     description: 'Australian Bureau of Meteorology Dataset Catalog'
     driver: intake.catalog.local.YAMLFileCatalog
     metadata: {}
-    
+
   csiro:
     args:
       path: "{{CATALOG_DIR}}csiro.yaml"
