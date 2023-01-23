@@ -6,13 +6,18 @@
 # The full license is in the LICENSE file, distributed with this software.
 #-----------------------------------------------------------------------------
 
+from pathlib import Path
+import pandas as pd
 import xarray as xr
 import numpy as np
 from .core import BaseModel, BaseGrid
 import logging
 
 
-logger = logging.getLogger('rompy.swan')
+logger = logging.getLogger(__file__)
+
+FILL_VALUE = -99.0
+
 
 class SwanModel(BaseModel):
 
@@ -312,11 +317,137 @@ class SwanGrid(BaseGrid):
         return ds_boundary
 
 
+def dset_to_swan(
+    dset: xr.Dataset,
+    output_file: str,
+    variables: list,
+    fmt: str="%4.2f",
+    fill_value: float=FILL_VALUE,
+    time_dim="time",
+):
+    """Convert netcdf into SWAN ASCII file.
+
+    Parameters
+    ----------
+    dset: xr.Dataset
+        Dataset to write in SWAN ASCII format.
+    output_file: str
+        Local file name for the ascii output file.
+    variables: list
+        Variables to write to ascii.
+    fmt: str
+        String float formatter.
+    fill_value: float
+        Fill value.
+    time_dim: str
+        Name of the time dimension if available in the dataset.
+
+    """
+    # Input checking
+    for data_var in variables:
+        if data_var not in dset.data_vars:
+            raise ValueError(f"Variable {data_var} not in {dset}")
+        if dset[data_var].ndim not in (2, 3):
+            raise NotImplementedError(
+                "Only 2D and 3D datasets are supported but "
+                f"dset.{data_var} has {dset[data_var].ndim} dims"
+            )
+
+    # Ensure time is a dimension so iteration will work
+    if time_dim not in dset.dims:
+        dset = dset.expand_dims(time_dim, 0)
+
+    # Write to ascii
+    logger.info(f"Writing SWAN ASCII file: {output_file}")
+    with open(output_file, "w") as stream:
+        for time in dset[time_dim]:
+            logger.debug(f"Appending Time {pd.to_datetime(time.values)} to {output_file}")
+            for data_var in variables:
+                logger.debug(f"Appending Variable {data_var} to {output_file}")
+                data = dset[data_var].sel(time=time).fillna(fill_value).values
+                np.savetxt(fname=stream, X=data, fmt=fmt, delimiter="\t")
+
+    return output_file
+
+
 @xr.register_dataset_accessor("swan")
 class Swan_accessor(object):
 
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
+
+    def grid(self, x="lon", y="lat", exc=FILL_VALUE):
+        """SWAN Grid object for this dataset.
+
+        TODO: Perhaps we could assume y, x are the last 2 axes.
+
+        """
+        return SwanGrid(
+            gridtype="REG",
+            x0=float(self._obj[x].min()),
+            y0=float(self._obj[y].min()),
+            dx=float(np.diff(self._obj[x]).mean()),
+            dy=float(np.diff(self._obj[y]).mean()),
+            nx=len(self._obj[x]),
+            ny=len(self._obj[y]),
+            rot=0,
+            exc=exc,
+        )
+
+    def to_bottom_grid(
+        self,
+        output_file,
+        fmt="%4.2f",
+        x="lon",
+        y="lat",
+        z="depth",
+        vmin=0.0,
+        fill_value=FILL_VALUE,
+        fac=1.0
+    ):
+        """Write SWAN inpgrid BOTTOM file.
+
+        Parameters
+        ----------
+        output_file: str
+            Local file name for the ascii output file.
+        fmt: str
+            String float formatter.
+        x: str
+            Name of the x-axis in the dataset.
+        y: str
+            Name of the y-axis in the dataset.
+        z: str
+            Name of the bottom variable in the dataset.
+        vmin: float
+            Minimum value below which depths are masked.
+        fill_value: float
+            Fill value.
+        fac: float
+            Multiplying factor, only necessary when the data are not in meters.
+
+        Returns
+        -------
+        inpgrid: str
+            SWAN INPgrid command instruction.
+        readinp: str
+            SWAN READinp command instruction.
+
+        TODO: Merge this method with `to_inpgrid`.
+        TODO: Change cookiecutter so readinp is used.
+
+        """
+        dset_to_swan(
+            dset=self._obj.where(self._obj > vmin).transpose(..., y, x),
+            output_file=output_file,
+            fmt=fmt,
+            variables=[z],
+            fill_value=fill_value,
+        )
+        grid = self.grid(x=x, y=y)
+        inpgrid = f"{grid.inpgrid}"
+        readinp = f"{fac} '{Path(output_file).name}' 3 FREE"
+        return inpgrid, readinp
 
     def to_inpgrid(self,output_file,grid=None,var='WIND',
                    fmt='%.2f',x='lon',y='lat',z1='u10',z2=None,time='time'):
