@@ -6,14 +6,69 @@
 # The full license is in the LICENSE file, distributed with this software.
 #-----------------------------------------------------------------------------
 
-from re import T
 from intake_xarray.base import DataSourceMixin
 from pandas import to_timedelta, to_datetime
-
 import logging
 
-logger = logging.getLogger('rompy.intake')
+from rompy import __version__
 
+
+logger = logging.getLogger(__file__)
+
+
+class XarraySource(DataSourceMixin):
+    """Xarray Driver with dataset transform support.
+
+    Parameters
+    ----------
+    urlpath: str
+        Path to netcdf or zarr source, zarr supports remote sources.
+    xarray_kwargs: dict
+        Arguments to pass to xarray.open_dataset to open urlpath.
+    transform: dict
+        Transformation filters to apply after opening the xarray dataset,
+        keys are filter callables and values the respective filter kwargs.
+    metadata: dict
+        Datasource metaata.
+
+    """
+    name = "xrsource"
+    version = __version__
+    container = "xarray"
+
+    def __init__(
+        self,
+        urlpath: str,
+        xarray_kwargs: dict = {},
+        transform: dict = {},
+        metadata: dict = {},
+    ):
+        super().__init__(metadata=metadata)
+        self.urlpath = urlpath
+        self.chunks = xarray_kwargs.pop("chunks", {})
+        self.xarray_kwargs = xarray_kwargs
+        self.transform = transform
+        self._ds = None
+
+    def _transform(self, ds):
+        """Apply transformations to dataset."""
+        from intake.source import import_name
+
+        for func, kwargs in self.transform.items():
+            if isinstance(func, str):
+                func = import_name(func)
+            ds = func(ds, **kwargs)
+        return ds
+
+    def _open_dataset(self):
+        import xarray as xr
+
+        ds = xr.open_dataset(
+            self.urlpath,
+            chunks=self.chunks,
+            **self.xarray_kwargs,
+        )
+        self._ds = self._transform(ds)
 
 
 class NetCDFFCStackSource(DataSourceMixin):
@@ -191,8 +246,6 @@ class NetCDFFCStackSource(DataSourceMixin):
                 ds = ds.where(inds,drop=True)
             
         self._ds = ds
-
-
 
 
 class NetCDFAODNStackSource(DataSourceMixin):
