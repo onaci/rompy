@@ -1,0 +1,24 @@
+spec:
+  kind: swan
+  workdir: /tmp/test-swan
+  nests:
+    - id: somenest
+      nests:
+        - id: somesubnest
+          grid: GridObject
+          time: TimeObject
+          static:
+            - SomeBathyObject
+            - SomeObstacleObject
+          forcing:
+            - SomeWindForcing
+            - SomeBoundaryForcing
+      grid: GridObject
+      time: TimeObject
+      static:
+        - SomeStaticObject
+        - AnotherStaticObject
+      forcing:
+        - SomeForcingObject
+        - AnotherForcingObject
+      
