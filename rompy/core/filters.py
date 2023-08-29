@@ -98,13 +98,14 @@ def crop_filter(ds, **data_slice) -> xr.Dataset:
     """
     Crop dataset.
 
+    Due to https://github.com/pydata/xarray/issues/4917 filtering non-dimension coordinates on datetimes isn't supported
+
     parameters
     ----------
     ds: xr.Dataset
         Input dataset to transform.
     data_slice: Iterable
         Data slice to crop
-
     Returns
     -------
     ds: xr.Dataset
@@ -115,8 +116,6 @@ def crop_filter(ds, **data_slice) -> xr.Dataset:
         ds = ds.sel(this_crop, drop=True)
         for k in data_slice.keys():
             if (k not in ds.dims.keys()) and (k in ds.coords.keys()):
-                if issubclass(type(ds[k].values[0]), np.datetime64):
-                    raise NotImplementedError("Due to https://github.com/pydata/xarray/issues/4917 filtering non-dimension coordinates on datetimes isn't supported")
                 ds = ds.where(ds[k] > data_slice[k].start, drop=True)
                 ds = ds.where(ds[k] < data_slice[k].stop, drop=True)
     return ds

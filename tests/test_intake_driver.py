@@ -10,7 +10,7 @@ import yaml
 import random
 
 import rompy
-from rompy.core import BaseGrid, DataBlob, DataGrid
+from rompy.core import BaseGrid, DataBlob, DataGrid, SourceIntake
 
 # round now to the nearest 6 hours
 cycle = datetime.utcnow().replace(
@@ -22,9 +22,11 @@ cycle = datetime.utcnow().replace(
 def gfs():
     return DataGrid(
         id="gfs_wind",
-        catalog=os.path.join(rompy.__path__[0], "catalogs", "gfs.yml"),
-        dataset="gfs_glob05",
-        params={"cycle": cycle},
+        source = SourceIntake(
+        catalog_uri=os.path.join(rompy.__path__[0], "catalogs", "gfs.yml"),
+        dataset_id="gfs_glob05",
+        kwargs = {"cycle": cycle},
+        ),
         filter={
             "crop": {
                 "time": slice(
@@ -42,9 +44,11 @@ def gfs():
 def csiro():
     return DataGrid(
         id="TODO",
-        catalog=os.path.join(rompy.__path__[0], "catalogs", "gfs.yml"),
-        dataset="TODO",
-        params={"cycle": cycle},
+        source = SourceIntake(
+        catalog_uri=os.path.join(rompy.__path__[0], "catalogs", "gfs.yml"),
+        dataset_id="gfs_glob05",
+        kwargs = {"cycle": cycle},
+        ),
         filter={
             "crop": {
                 "time": slice(
@@ -138,11 +142,12 @@ def generate_synthetic_data_and_catalog(tmp_path_factory, failing):
                 'g',
             )}
         
-    
     return DataGrid(
-        id="some_data",
-        catalog=intake_temp_file.as_posix(),
-        dataset="my_dataset",
+        id = "some_id",
+        source=SourceIntake(
+        catalog_uri=intake_temp_file.as_posix(),
+        dataset_id="my_dataset",
+        ),
         filter={
             "crop":  cropper,
             "subset": {"data_vars": ["wnd_dir", "wnd_spd"]},
@@ -169,11 +174,11 @@ def test_gfs(gfs):
     assert gfs.ds.lon.max() == 10
     assert gfs.ds.lon.min() == 0
     run_dir = tempfile.mkdtemp()
-    downloaded = gfs.get(run_dir)
-    assert downloaded.ds.lat.max() == 10
-    assert downloaded.ds.lat.min() == 0
-    assert downloaded.ds.lon.max() == 10
-    assert downloaded.ds.lon.min() == 0
+    downloaded_ds = xr.open_dataset(gfs.get(run_dir))
+    assert downloaded_ds.lat.max() == 10
+    assert downloaded_ds.lat.min() == 0
+    assert downloaded_ds.lon.max() == 10
+    assert downloaded_ds.lon.min() == 0
     shutil.rmtree(run_dir)
 
 
@@ -185,7 +190,7 @@ def test_csiro(csiro):
     assert csiro.ds.lon.max() == 10
     assert csiro.ds.lon.min() == 0
     run_dir = tempfile.mkdtemp()
-    downloaded = gfs.get(run_dir)
+    downloaded_ds = xr.open_dataset(gfs.get(run_dir))
     # These may not be exact, may need to fine tune
     # assert downloaded.ds.lat.max() == 10
     # assert downloaded.ds.lat.min() == 0
@@ -195,7 +200,7 @@ def test_csiro(csiro):
 
 def test_non_dim_filter_time_fail(synthetic_catalog_and_data_bad):
     """Test that datetime filtering fails if you are trying it on non-dimensioned time coordinates"""
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(TypeError):
         synthetic_catalog_and_data_bad.ds
 
 def test_non_dim_filter(synthetic_catalog_and_data_good):
